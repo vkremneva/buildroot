@@ -1,0 +1,111 @@
+From 1590e907ff04c2327a7990cdb798663d5e672581 Mon Sep 17 00:00:00 2001
+From: Claudiu Zissulescu <claziss@synopsys.com>
+Date: Wed Oct 21 16:11:43 2020 +0300
+Subject: [PATCH] arc: Add --with-fpu support for ARCv2 cpus
+
+Support for a compile-time default FPU. The --with-fpu configuration
+option is ignored if -mfpu compiler option is specified. The FPU
+options are only available for ARCv2 cpus.
+
+gcc/
+yyyy-mm-dd  Claudiu Zissulescu  <claziss@synopsys.com>
+
+        * config.gcc (arc): Add support for with_cpu option.
+        * config/arc/arc.h (OPTION_DEFAULT_SPECS): Add fpu.
+
+Signed-off-by: Claudiu Zissulescu <claziss@synopsys.com>
+
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 1d72f53a98c..8da958dc1f8 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -4206,18 +4206,70 @@ case "${target}" in
+@@ -4206,18 +4206,70 @@ case "${target}" in
+                ;;
+
+        arc*-*-*)
+-               supported_defaults="cpu"
++               supported_defaults="cpu fpu"
+
++               new_cpu=arc700
+                if [ x"$with_cpu" = x ] \
+                    || grep "^ARC_CPU ($with_cpu," \
+                       ${srcdir}/config/arc/arc-cpus.def \
+                       > /dev/null; then
+                 # Ok
+-                true
++                new_cpu=$with_cpu
+                else
+                 echo "Unknown cpu used in --with-cpu=$with_cpu" 1>&2
+                 exit 1
+                fi
++
++               # see if --with-fpu matches any of the supported FPUs
++               case "$with_fpu" in
++               "")
++                       # OK
++                       ;;
++               fpus | fpus_div | fpus_fma | fpus_all)
++                       # OK if em or hs
++                       if grep -P "^ARC_CPU \($new_cpu,\s+[emhs]+," \
++                          ${srcdir}/config/arc/arc-cpus.def \
++                          > /dev/null; then
++                          # OK
++                          true
++                       else
++                        echo "Unknown floating point type used in "\
++                        "--with-fpu=$with_fpu for cpu $new_cpu" 1>&2
++                        exit 1
++                       fi
++               ;;
++               fpuda | fpuda_div | fpuda_fma | fpuda_all)
++                       # OK only em
++                       if grep -P "^ARC_CPU \($new_cpu,\s+em," \
++                          ${srcdir}/config/arc/arc-cpus.def \
++                          > /dev/null; then
++                          # OK
++                          true
++                       else
++                        echo "Unknown floating point type used in "\
++                             "--with-fpu=$with_fpu for cpu $new_cpu" 1>&2
++                        exit 1
++                       fi
++                       ;;
++               fpud | fpud_div | fpud_fma | fpud_all)
++                       # OK only hs
++                       if grep -P "^ARC_CPU \($new_cpu,\s+hs," \
++                          ${srcdir}/config/arc/arc-cpus.def \
++                          > /dev/null; then
++                          # OK
++                          true
++                       else
++                        echo "Unknown floating point type used in"\
++                             "--with-fpu=$with_fpu for cpu $new_cpu" 1>&2
++                        exit 1
++                       fi
++                       ;;
++               *)
++                       echo "Unknown floating point type used in "\
++                            "--with-fpu=$with_fpu" 1>&2
++                       exit 1
++                       ;;
++               esac
+                ;;
+
+     csky-*-*)
+diff --git a/gcc/config/arc/arc.h b/gcc/config/arc/arc.h
+index a3fc44361a4..ac514ca4167 100644
+--- a/gcc/config/arc/arc.h
++++ b/gcc/config/arc/arc.h
+@@ -100,7 +100,11 @@ extern const char *arc_cpu_to_as (int argc, const char **argv);
+   "%:cpu_to_as(%{mcpu=*:%*}) %{mspfp*} %{mdpfp*} "                      \
+   "%{mfpu=fpuda*:-mfpuda} %{mcode-density}"
+
++/* Support for a compile-time default CPU and FPU.  The rules are:
++   --with-cpu is ignored if -mcpu, mARC*, marc*, mA7, mA6 are specified.
++   --with-fpu is ignored if -mfpu is specified.  */
+ #define OPTION_DEFAULT_SPECS                                           \
++  {"fpu", "%{!mfpu=*:-mfpu=%(VALUE)}"},                                        \
+   {"cpu", "%{!mcpu=*:%{!mARC*:%{!marc*:%{!mA7:%{!mA6:-mcpu=%(VALUE)}}}}}" }
+
+ #ifndef DRIVER_ENDIAN_SELF_SPECS
